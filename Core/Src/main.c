@@ -43,6 +43,8 @@
 /* Private variables ---------------------------------------------------------*/
 SD_HandleTypeDef hsd;
 
+TIM_HandleTypeDef htim5;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -83,6 +85,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_SDIO_SD_Init(void);
+static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -94,12 +97,117 @@ HAL_SD_CardInfoTypeDef pCardInfo;
 
 void DO_ASSERT()
 {
-  printf("HAL_NVIC_SystemReset after 1000 ms\n");
+  printf("HAL_NVIC_SystemReset after 3000 ms\n");
 
-  HAL_Delay(1000);
+  HAL_Delay(3000);
 
   HAL_NVIC_SystemReset();
 }
+
+extern uint32_t usbd_rdblk_cnt;
+extern uint32_t usbd_wtblk_cnt;
+
+uint32_t usbd_rdblk_cnt_monitor;
+uint32_t usbd_wtblk_cnt_monitor;
+
+uint8_t tim5_trigged = 0;
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if(htim->Instance == htim5.Instance)
+  {
+    tim5_trigged = 1;
+
+    usbd_rdblk_cnt_monitor = usbd_rdblk_cnt;
+    usbd_wtblk_cnt_monitor = usbd_wtblk_cnt;
+    usbd_rdblk_cnt = usbd_wtblk_cnt = 0;
+  }
+}
+
+
+FIL file;
+int ret;
+char currfile[100];
+uint8_t fbuf[512];
+uint32_t nRead;
+uint32_t readtotal=0;
+uint32_t tickstart;
+
+void file_write_test()
+{
+  for(int i=0;i<512;i++)
+  {
+    fbuf[i] = i%0xff;
+  }
+
+  strcpy(currfile, "0:/");
+  strcat(currfile, "file0.bin");
+
+  printf("write to file %s\n", currfile);
+
+  ret = f_open(&file, currfile, FA_CREATE_ALWAYS | FA_WRITE);
+
+  if(ret != FR_OK)
+  {
+    printf("%s open failed\n", currfile);
+    f_close(&file);
+    return;
+  }
+
+  tickstart = HAL_GetTick();
+
+  for(int i=0;i<2048;i++)
+  {
+    if(f_write(&file, fbuf, 512, (UINT*)&nRead) != FR_OK)
+    {
+      printf("f_write Error\n");
+      break;
+    }
+    if(nRead != 512)
+    {
+      printf("nRead is %lu\n", nRead);
+      break;
+    }
+    readtotal+=512;
+  }
+  f_close(&file);
+
+  printf("writed %lu bytes\n", readtotal);
+
+  printf("Elapsed %lu\n", HAL_GetTick()-tickstart);
+
+
+
+  printf("nRead from file %s\n", currfile);
+
+  ret = f_open(&file, currfile, FA_READ);
+
+  if(ret != FR_OK)
+  {
+    printf("%s open failed\n", currfile);
+    f_close(&file);
+    return;
+  }
+
+  tickstart = HAL_GetTick();
+
+  readtotal=0;
+
+  while(1)
+  {
+    ret = f_read(&file, fbuf, sizeof(fbuf), (UINT*)&nRead);
+    if(ret != FR_OK) break;
+    if(nRead == 0) break;
+    readtotal += nRead;
+  }
+  f_close(&file);
+
+  printf("Readed %lu bytes\n", readtotal);
+
+  printf("Elapsed %lu\n", HAL_GetTick()-tickstart);
+
+}
+
 
 /* USER CODE END 0 */
 
@@ -134,29 +242,30 @@ int main(void)
   MX_USART2_UART_Init();
   MX_SDIO_SD_Init();
   MX_FATFS_Init();
-//  MX_USB_DEVICE_Init();
+  MX_USB_DEVICE_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  printf("F411CE USB Demo Started\n");
 
-  HAL_SD_GetCardInfo(&hsd, &pCardInfo);
-  printf("%lu, %lu\n", pCardInfo.BlockNbr, pCardInfo.BlockSize);
+  file_write_test();
 
-
-  MX_USB_DEVICE_Init();
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 
-//    HAL_Delay(1000);
-//
-//    HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
+    if(tim5_trigged)
+    {
+      tim5_trigged = 0;
+
+      HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
+    }
+
   }
   /* USER CODE END 3 */
 }
@@ -225,10 +334,57 @@ static void MX_SDIO_SD_Init(void)
   hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
   hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
   hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
-  hsd.Init.ClockDiv = 4;
+  hsd.Init.ClockDiv = 8;
   /* USER CODE BEGIN SDIO_Init 2 */
 
   /* USER CODE END SDIO_Init 2 */
+
+}
+
+/**
+  * @brief TIM5 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM5_Init(void)
+{
+
+  /* USER CODE BEGIN TIM5_Init 0 */
+
+  /* USER CODE END TIM5_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM5_Init 1 */
+
+  /* USER CODE END TIM5_Init 1 */
+  htim5.Instance = TIM5;
+  htim5.Init.Prescaler = 9600-1;
+  htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim5.Init.Period = 10000-1;
+  htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim5, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim5, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM5_Init 2 */
+
+  HAL_TIM_Base_Start_IT(&htim5);
+
+  /* USER CODE END TIM5_Init 2 */
 
 }
 
@@ -260,6 +416,8 @@ static void MX_USART2_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART2_Init 2 */
+
+  printf("F411CE USB Demo Started\n");
 
   /* USER CODE END USART2_Init 2 */
 
