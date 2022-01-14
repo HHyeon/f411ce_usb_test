@@ -125,90 +125,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 
 
-FIL file;
-int ret;
-char currfile[100];
-uint8_t fbuf[512];
-uint32_t nRead;
-uint32_t readtotal=0;
-uint32_t tickstart;
-
-void file_write_test()
-{
-  for(int i=0;i<512;i++)
-  {
-    fbuf[i] = i%0xff;
-  }
-
-  strcpy(currfile, "0:/");
-  strcat(currfile, "file0.bin");
-
-  printf("write to file %s\n", currfile);
-
-  ret = f_open(&file, currfile, FA_CREATE_ALWAYS | FA_WRITE);
-
-  if(ret != FR_OK)
-  {
-    printf("%s open failed\n", currfile);
-    f_close(&file);
-    return;
-  }
-
-  tickstart = HAL_GetTick();
-
-  for(int i=0;i<2048;i++)
-  {
-    if(f_write(&file, fbuf, 512, (UINT*)&nRead) != FR_OK)
-    {
-      printf("f_write Error\n");
-      break;
-    }
-    if(nRead != 512)
-    {
-      printf("nRead is %lu\n", nRead);
-      break;
-    }
-    readtotal+=512;
-  }
-  f_close(&file);
-
-  printf("writed %lu bytes\n", readtotal);
-
-  printf("Elapsed %lu\n", HAL_GetTick()-tickstart);
-
-
-
-  printf("nRead from file %s\n", currfile);
-
-  ret = f_open(&file, currfile, FA_READ);
-
-  if(ret != FR_OK)
-  {
-    printf("%s open failed\n", currfile);
-    f_close(&file);
-    return;
-  }
-
-  tickstart = HAL_GetTick();
-
-  readtotal=0;
-
-  while(1)
-  {
-    ret = f_read(&file, fbuf, sizeof(fbuf), (UINT*)&nRead);
-    if(ret != FR_OK) break;
-    if(nRead == 0) break;
-    readtotal += nRead;
-  }
-  f_close(&file);
-
-  printf("Readed %lu bytes\n", readtotal);
-
-  printf("Elapsed %lu\n", HAL_GetTick()-tickstart);
-
-}
-
-
 /* USER CODE END 0 */
 
 /**
@@ -250,8 +166,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
-//  file_write_test();
 
   while (1)
   {
