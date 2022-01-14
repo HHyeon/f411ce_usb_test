@@ -120,7 +120,7 @@ extern SD_HandleTypeDef hsd;
 extern HAL_SD_CardInfoTypeDef pCardInfo;
 int Stat;
 
-#define SD_TRANSFER_TIMEOUT 10
+#define SD_TRANSFER_TIMEOUT 1000
 
 uint32_t usbd_rdblk_cnt=0;
 uint32_t usbd_wtblk_cnt=0;
@@ -249,6 +249,10 @@ int8_t STORAGE_Read_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t bl
   usbd_rdblk_cnt++;
 
   Stat = HAL_SD_ReadBlocks(&hsd, buf, blk_addr, blk_len, SD_TRANSFER_TIMEOUT);
+  if(Stat == HAL_OK)
+  {
+    while(HAL_SD_GetCardState(&hsd) != HAL_SD_CARD_TRANSFER);
+  }
 
   return Stat;
   /* USER CODE END 6 */
@@ -265,6 +269,10 @@ int8_t STORAGE_Write_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t b
   usbd_wtblk_cnt++;
 
   Stat = HAL_SD_WriteBlocks(&hsd, buf, blk_addr, blk_len, SD_TRANSFER_TIMEOUT);
+  if(Stat == HAL_OK)
+  {
+    while(HAL_SD_GetCardState(&hsd) != HAL_SD_CARD_TRANSFER);
+  }
 
   return Stat;
   /* USER CODE END 7 */
